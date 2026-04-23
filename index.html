@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>汉堡堆叠大师 - Burger Balance Blitz</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+</head>
+<body>
+    <div id="game-container">
+        <!-- 游戏标题 -->
+        <div id="game-title">
+            <h1>🍔 汉堡堆叠大师</h1>
+            <p>巧妙利用食材特性，堆叠出最高的汉堡巨塔！</p>
+        </div>
+        
+        <!-- 顾客订单 -->
+        <div id="customer-order" class="hidden">
+            <div class="order-bubble">
+                <span class="customer-emoji">👤</span>
+                <div class="order-text">
+                    <p id="order-content"></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 游戏信息面板 -->
+        <div id="game-info">
+            <div class="info-item">
+                <span class="info-label">得分:</span>
+                <span id="score" class="info-value">0</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">倍率:</span>
+                <span id="multiplier" class="info-value">x1.0</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">时间:</span>
+                <span id="timer" class="info-value">60</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">高度:</span>
+                <span id="height" class="info-value">0</span>
+            </div>
+        </div>
+        
+        <!-- 重心偏移指示器 -->
+        <div id="center-of-mass-indicator">
+            <div class="indicator-label">重心偏移:</div>
+            <div class="indicator-bar-container">
+                <div id="indicator-bar" class="indicator-bar"></div>
+            </div>
+            <div id="indicator-value" class="indicator-value">0%</div>
+        </div>
+        
+        <!-- 游戏画布 -->
+        <div id="canvas-container">
+            <canvas id="game-canvas"></canvas>
+        </div>
+        
+        <!-- 食材选择面板 -->
+        <div id="ingredients-panel">
+            <div class="ingredient-item" data-type="lettuce">
+                <div class="ingredient-icon">🥬</div>
+                <div class="ingredient-name">生菜</div>
+                <div class="ingredient-desc">蓬松有弹性</div>
+            </div>
+            <div class="ingredient-item" data-type="cheese">
+                <div class="ingredient-icon">🧀</div>
+                <div class="ingredient-name">奶酪</div>
+                <div class="ingredient-desc">表面光滑</div>
+            </div>
+            <div class="ingredient-item" data-type="patty">
+                <div class="ingredient-icon">🍖</div>
+                <div class="ingredient-name">肉饼</div>
+                <div class="ingredient-desc">厚重稳定</div>
+            </div>
+            <div class="ingredient-item" data-type="tomato">
+                <div class="ingredient-icon">🍅</div>
+                <div class="ingredient-name">番茄</div>
+                <div class="ingredient-desc">圆形易滚</div>
+            </div>
+            <div class="ingredient-item" data-type="onion">
+                <div class="ingredient-icon">🧅</div>
+                <div class="ingredient-name">洋葱圈</div>
+                <div class="ingredient-desc">环状轻盈</div>
+            </div>
+            <div class="ingredient-item" data-type="bacon">
+                <div class="ingredient-icon">🥓</div>
+                <div class="ingredient-name">培根</div>
+                <div class="ingredient-desc">细长弯曲</div>
+            </div>
+        </div>
+        
+        <!-- 游戏控制按钮 -->
+        <div id="game-controls">
+            <button id="start-btn">开始游戏</button>
+            <button id="pause-btn" class="hidden">暂停</button>
+            <button id="restart-btn" class="hidden">重新开始</button>
+        </div>
+        
+        <!-- 游戏结束画面 -->
+        <div id="game-over" class="hidden">
+            <div class="game-over-content">
+                <h2 id="game-over-title">游戏结束</h2>
+                <p id="game-over-reason"></p>
+                <p class="final-score">最终得分: <span id="final-score">0</span></p>
+                <p class="final-height">最高高度: <span id="final-height">0</span></p>
+                <button id="play-again-btn">再玩一次</button>
+            </div>
+        </div>
+        
+        <!-- 拖拽中的食材指示器 -->
+        <div id="dragging-indicator" class="hidden">
+            <div id="dragging-icon"></div>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
