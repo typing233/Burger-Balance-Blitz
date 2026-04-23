@@ -1,0 +1,909 @@
+// 汉堡堆叠大师游戏主逻辑
+class BurgerGame {
+    constructor() {
+        // Matter.js 模块
+        this.Engine = Matter.Engine;
+        this.Render = Matter.Render;
+        this.Runner = Matter.Runner;
+        this.World = Matter.World;
+        this.Bodies = Matter.Bodies;
+        this.Events = Matter.Events;
+        this.Body = Matter.Body;
+        this.Composite = Matter.Composite;
+        this.Bounds = Matter.Bounds;
+        this.Vector = Matter.Vector;
+        
+        // 游戏状态
+        this.gameState = 'idle'; // idle, playing, paused, gameover
+        this.score = 0;
+        this.multiplier = 1.0;
+        this.timeLeft = 120; // 增加到120秒
+        this.maxHeight = 0;
+        this.currentHeight = 0;
+        
+        // 物理引擎相关
+        this.engine = null;
+        this.render = null;
+        this.runner = null;
+        this.world = null;
+        this.canvas = null;
+        this.canvasContainer = null;
+        
+        // 游戏对象
+        this.baseBun = null;
+        this.ingredients = [];
+        this.draggedIngredient = null;
+        this.isDragging = false;
+        
+        // 重心偏移检测
+        this.centerOfMass = { x: 0, y: 0 };
+        this.tiltStartTime = null;
+        this.maxTiltAngle = 45 * (Math.PI / 180); // 45度转弧度
+        this.tiltDuration = 2000; // 2秒
+        
+        // 顾客订单
+        this.currentOrder = null;
+        this.orderTimer = null;
+        
+        // 食材配置
+        this.ingredientConfig = {
+            lettuce: {
+                name: '生菜',
+                emoji: '🥬',
+                width: 120,
+                height: 30,
+                mass: 0.5,
+                restitution: 0.8, // 高弹性
+                friction: 0.1,
+                color: '#8BC34A',
+                shape: 'rectangle',
+                points: 10
+            },
+            cheese: {
+                name: '奶酪',
+                emoji: '🧀',
+                width: 100,
+                height: 15,
+                mass: 0.3,
+                restitution: 0.3,
+                friction: 0.02, // 低摩擦（很滑）
+                color: '#FFEB3B',
+                shape: 'rectangle',
+                points: 15
+            },
+            patty: {
+                name: '肉饼',
+                emoji: '🍖',
+                width: 110,
+                height: 40,
+                mass: 2.0, // 厚重
+                restitution: 0.2,
+                friction: 0.3,
+                color: '#795548',
+                shape: 'rectangle',
+                points: 25
+            },
+            tomato: {
+                name: '番茄',
+                emoji: '🍅',
+                width: 80,
+                height: 80,
+                radius: 40,
+                mass: 0.8,
+                restitution: 0.5,
+                friction: 0.1, // 圆形易滚
+                color: '#F44336',
+                shape: 'circle',
+                points: 20
+            },
+            onion: {
+                name: '洋葱圈',
+                emoji: '🧅',
+                width: 90,
+                height: 90,
+                outerRadius: 45,
+                innerRadius: 30,
+                mass: 0.4,
+                restitution: 0.6,
+                friction: 0.2,
+                color: '#E91E63',
+                shape: 'ring',
+                points: 18
+            },
+            bacon: {
+                name: '培根',
+                emoji: '🥓',
+                width: 130,
+                height: 20,
+                mass: 0.6,
+                restitution: 0.4,
+                friction: 0.15,
+                color: '#FF5722',
+                shape: 'rectangle',
+                points: 12
+            }
+        };
+        
+        // 顾客订单模板
+        this.orderTemplates = [
+            { text: '我要生菜在肉饼上面！', type: 'sequence', ingredients: ['patty', 'lettuce'] },
+            { text: '给我一个番茄汉堡！', type: 'specific', ingredient: 'tomato', count: 2 },
+            { text: '我要奶酪在最上面！', type: 'top', ingredient: 'cheese' },
+            { text: '来一个全肉汉堡！', type: 'specific', ingredient: 'patty', count: 3 },
+            { text: '我要健康一点，多放生菜！', type: 'specific', ingredient: 'lettuce', count: 3 },
+            { text: '番茄加奶酪，完美组合！', type: 'sequence', ingredients: ['tomato', 'cheese'] },
+            { text: '洋葱圈越多越好！', type: 'specific', ingredient: 'onion', count: 3 },
+            { text: '培根配番茄，绝了！', type: 'sequence', ingredients: ['bacon', 'tomato'] }
+        ];
+        
+        // 初始化
+        this.init();
+    }
+    
+    init() {
+        // 获取DOM元素
+        this.canvas = document.getElementById('game-canvas');
+        this.canvasContainer = document.getElementById('canvas-container');
+        
+        // 绑定事件监听
+        this.bindEvents();
+        
+        // 初始化物理引擎（游戏开始时再完全启动）
+        this.initPhysics();
+    }
+    
+    initPhysics() {
+        // 创建引擎
+        this.engine = this.Engine.create();
+        this.world = this.engine.world;
+        
+        // 设置重力
+        this.world.gravity.y = 1.0;
+        
+        // 获取画布尺寸
+        const rect = this.canvasContainer.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // 设置画布尺寸
+        this.canvas.width = width;
+        this.canvas.height = height;
+        
+        // 创建渲染器
+        this.render = this.Render.create({
+            canvas: this.canvas,
+            engine: this.engine,
+            options: {
+                width: width,
+                height: height,
+                wireframes: false,
+                background: 'transparent',
+                showAngleIndicator: false,
+                showCollisions: false,
+                showVelocity: false
+            }
+        });
+        
+        // 创建边界和地面
+        this.createBoundaries(width, height);
+        
+        // 创建面包底座
+        this.createBaseBun(width, height);
+    }
+    
+    createBoundaries(width, height) {
+        const boundaryOptions = {
+            isStatic: true,
+            render: {
+                visible: false
+            }
+        };
+        
+        // 地面
+        const ground = this.Bodies.rectangle(width / 2, height + 50, width, 100, boundaryOptions);
+        ground.label = 'ground';
+        
+        // 左边界
+        const leftWall = this.Bodies.rectangle(-50, height / 2, 100, height * 2, boundaryOptions);
+        leftWall.label = 'wall';
+        
+        // 右边界
+        const rightWall = this.Bodies.rectangle(width + 50, height / 2, 100, height * 2, boundaryOptions);
+        rightWall.label = 'wall';
+        
+        // 添加到世界
+        this.World.add(this.world, [ground, leftWall, rightWall]);
+    }
+    
+    createBaseBun(width, height) {
+        // 面包底座配置
+        const bunWidth = 150;
+        const bunHeight = 40;
+        const bunY = height - 60;
+        
+        // 创建面包底座（底部是平的，顶部有弧度）
+        this.baseBun = this.Bodies.rectangle(width / 2, bunY, bunWidth, bunHeight, {
+            isStatic: true,
+            label: 'baseBun',
+            render: {
+                fillStyle: '#DEB887',
+                strokeStyle: '#D2691E',
+                lineWidth: 3
+            },
+            chamfer: {
+                radius: [20, 20, 5, 5] // 顶部圆角，底部直角
+            }
+        });
+        
+        // 添加到世界
+        this.World.add(this.world, this.baseBun);
+    }
+    
+    bindEvents() {
+        // 游戏控制按钮
+        document.getElementById('start-btn').addEventListener('click', () => this.startGame());
+        document.getElementById('pause-btn').addEventListener('click', () => this.togglePause());
+        document.getElementById('restart-btn').addEventListener('click', () => this.restartGame());
+        document.getElementById('play-again-btn').addEventListener('click', () => this.restartGame());
+        
+        // 食材选择
+        const ingredientItems = document.querySelectorAll('.ingredient-item');
+        ingredientItems.forEach(item => {
+            item.addEventListener('mousedown', (e) => this.startIngredientDrag(e, item));
+            item.addEventListener('touchstart', (e) => this.startIngredientDrag(e, item));
+        });
+        
+        // 鼠标移动和释放
+        document.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        document.addEventListener('mouseup', (e) => this.onMouseUp(e));
+        document.addEventListener('touchmove', (e) => this.onMouseMove(e));
+        document.addEventListener('touchend', (e) => this.onMouseUp(e));
+        
+        // 窗口大小改变
+        window.addEventListener('resize', () => this.handleResize());
+    }
+    
+    startIngredientDrag(e, item) {
+        if (this.gameState !== 'playing') return;
+        
+        e.preventDefault();
+        
+        const ingredientType = item.dataset.type;
+        const config = this.ingredientConfig[ingredientType];
+        
+        if (!config) return;
+        
+        // 显示拖拽指示器
+        const indicator = document.getElementById('dragging-indicator');
+        const icon = document.getElementById('dragging-icon');
+        icon.textContent = config.emoji;
+        indicator.classList.remove('hidden');
+        
+        // 记录拖拽状态
+        this.isDragging = true;
+        this.draggedIngredient = {
+            type: ingredientType,
+            config: config,
+            startX: e.clientX || e.touches[0].clientX,
+            startY: e.clientY || e.touches[0].clientY
+        };
+        
+        // 更新指示器位置
+        this.updateDragIndicator(e);
+    }
+    
+    onMouseMove(e) {
+        if (!this.isDragging) return;
+        this.updateDragIndicator(e);
+    }
+    
+    updateDragIndicator(e) {
+        const indicator = document.getElementById('dragging-indicator');
+        const x = e.clientX || (e.touches && e.touches[0].clientX);
+        const y = e.clientY || (e.touches && e.touches[0].clientY);
+        
+        indicator.style.left = x + 'px';
+        indicator.style.top = y + 'px';
+    }
+    
+    onMouseUp(e) {
+        if (!this.isDragging || !this.draggedIngredient) {
+            this.isDragging = false;
+            return;
+        }
+        
+        e.preventDefault();
+        
+        // 隐藏拖拽指示器
+        const indicator = document.getElementById('dragging-indicator');
+        indicator.classList.add('hidden');
+        
+        // 获取释放位置
+        const x = e.clientX || (e.changedTouches && e.changedTouches[0].clientX);
+        const y = e.clientY || (e.changedTouches && e.changedTouches[0].clientY);
+        
+        // 转换为画布坐标
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const canvasX = x - canvasRect.left;
+        const canvasY = y - canvasRect.top;
+        
+        // 检查是否在画布范围内
+        if (canvasX >= 0 && canvasX <= this.canvas.width && 
+            canvasY >= 0 && canvasY <= this.canvas.height) {
+            
+            // 创建食材物理体
+            this.createIngredient(this.draggedIngredient.type, canvasX, canvasY);
+        }
+        
+        // 重置拖拽状态
+        this.isDragging = false;
+        this.draggedIngredient = null;
+    }
+    
+    createIngredient(type, x, y) {
+        const config = this.ingredientConfig[type];
+        if (!config) return null;
+        
+        let body;
+        
+        // 根据形状创建不同的物理体
+        switch (config.shape) {
+            case 'circle':
+                body = this.Bodies.circle(x, y, config.radius, {
+                    label: `ingredient_${type}`,
+                    mass: config.mass,
+                    restitution: config.restitution,
+                    friction: config.friction,
+                    frictionAir: 0.01,
+                    render: {
+                        fillStyle: config.color,
+                        strokeStyle: this.darkenColor(config.color, 20),
+                        lineWidth: 2
+                    }
+                });
+                break;
+                
+            case 'ring':
+                // 使用多边形模拟洋葱圈
+                const outerVertices = this.createCircleVertices(config.outerRadius, 16);
+                const innerVertices = this.createCircleVertices(config.innerRadius, 16);
+                
+                // 简化处理：使用圆形，中间镂空通过渲染处理
+                body = this.Bodies.circle(x, y, config.outerRadius, {
+                    label: `ingredient_${type}`,
+                    mass: config.mass,
+                    restitution: config.restitution,
+                    friction: config.friction,
+                    frictionAir: 0.01,
+                    render: {
+                        fillStyle: config.color,
+                        strokeStyle: this.darkenColor(config.color, 20),
+                        lineWidth: 2
+                    }
+                });
+                break;
+                
+            default:
+                // 矩形（生菜、奶酪、肉饼、培根）
+                body = this.Bodies.rectangle(x, y, config.width, config.height, {
+                    label: `ingredient_${type}`,
+                    mass: config.mass,
+                    restitution: config.restitution,
+                    friction: config.friction,
+                    frictionAir: 0.01,
+                    render: {
+                        fillStyle: config.color,
+                        strokeStyle: this.darkenColor(config.color, 20),
+                        lineWidth: 2
+                    },
+                    chamfer: type === 'bacon' ? { radius: 5 } : { radius: 3 }
+                });
+                break;
+        }
+        
+        // 添加到世界
+        this.World.add(this.world, body);
+        
+        // 记录食材
+        this.ingredients.push({
+            body: body,
+            type: type,
+            config: config,
+            added: Date.now()
+        });
+        
+        return body;
+    }
+    
+    createCircleVertices(radius, segments) {
+        const vertices = [];
+        for (let i = 0; i < segments; i++) {
+            const angle = (Math.PI * 2 * i) / segments;
+            vertices.push({
+                x: radius * Math.cos(angle),
+                y: radius * Math.sin(angle)
+            });
+        }
+        return vertices;
+    }
+    
+    darkenColor(color, percent) {
+        // 简单的颜色加深函数
+        const num = parseInt(color.replace('#', ''), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) - amt;
+        const G = (num >> 8 & 0x00FF) - amt;
+        const B = (num & 0x0000FF) - amt;
+        return '#' + (
+            0x1000000 +
+            (R < 255 ? (R < 1 ? 0 : R) : 255) * 0x10000 +
+            (G < 255 ? (G < 1 ? 0 : G) : 255) * 0x100 +
+            (B < 255 ? (B < 1 ? 0 : B) : 255)
+        ).toString(16).slice(1);
+    }
+    
+    startGame() {
+        if (this.gameState === 'playing') return;
+        
+        // 重置游戏状态
+        this.resetGame();
+        
+        // 更新游戏状态
+        this.gameState = 'playing';
+        
+        // 启动渲染和引擎
+        this.Render.run(this.render);
+        this.runner = this.Runner.create();
+        this.Runner.run(this.runner, this.engine);
+        
+        // 启动游戏循环
+        this.gameLoop();
+        
+        // 启动计时器
+        this.startTimer();
+        
+        // 启动顾客订单
+        this.startOrderSystem();
+        
+        // 更新UI
+        this.updateUI();
+        
+        // 显示/隐藏按钮
+        document.getElementById('start-btn').classList.add('hidden');
+        document.getElementById('pause-btn').classList.remove('hidden');
+        document.getElementById('restart-btn').classList.remove('hidden');
+    }
+    
+    resetGame() {
+        // 重置分数和时间
+        this.score = 0;
+        this.multiplier = 1.0;
+        this.timeLeft = 60;
+        this.maxHeight = 0;
+        this.currentHeight = 0;
+        
+        // 重置倾斜检测
+        this.tiltStartTime = null;
+        
+        // 清空食材
+        if (this.ingredients.length > 0) {
+            this.ingredients.forEach(ing => {
+                if (ing.body) {
+                    this.World.remove(this.world, ing.body);
+                }
+            });
+            this.ingredients = [];
+        }
+        
+        // 清空订单
+        this.currentOrder = null;
+        if (this.orderTimer) {
+            clearTimeout(this.orderTimer);
+            this.orderTimer = null;
+        }
+        
+        // 隐藏订单
+        document.getElementById('customer-order').classList.add('hidden');
+        document.getElementById('game-over').classList.add('hidden');
+    }
+    
+    gameLoop() {
+        if (this.gameState !== 'playing') return;
+        
+        // 检查游戏状态
+        this.checkGameConditions();
+        
+        // 更新得分和高度
+        this.updateScoreAndHeight();
+        
+        // 计算重心偏移
+        this.calculateCenterOfMass();
+        
+        // 继续循环
+        requestAnimationFrame(() => this.gameLoop());
+    }
+    
+    checkGameConditions() {
+        // 1. 检查食材是否掉落出边界
+        this.checkFallenIngredients();
+        
+        // 2. 检查整体倾斜角度
+        this.checkTiltAngle();
+        
+        // 3. 检查时间（在计时器中处理）
+    }
+    
+    checkFallenIngredients() {
+        const canvasHeight = this.canvas.height;
+        
+        for (let i = this.ingredients.length - 1; i >= 0; i--) {
+            const ing = this.ingredients[i];
+            if (!ing.body) continue;
+            
+            // 检查是否掉落出画布底部
+            if (ing.body.position.y > canvasHeight + 100) {
+                // 食材掉落，游戏结束
+                this.endGame('有食材掉落到了桌面外！');
+                return;
+            }
+        }
+    }
+    
+    checkTiltAngle() {
+        if (this.ingredients.length < 2) return; // 至少需要2个食材才会有倾斜问题
+        
+        // 计算整体倾斜角度
+        const tiltAngle = this.calculateOverallTilt();
+        
+        // 检查是否超过45度
+        if (Math.abs(tiltAngle) > this.maxTiltAngle) {
+            if (!this.tiltStartTime) {
+                this.tiltStartTime = Date.now();
+            } else {
+                const elapsed = Date.now() - this.tiltStartTime;
+                if (elapsed >= this.tiltDuration) {
+                    // 倾斜超过2秒，游戏结束
+                    this.endGame('汉堡倾斜超过45度并持续了2秒！');
+                    return;
+                }
+            }
+        } else {
+            // 倾斜恢复，重置计时器
+            this.tiltStartTime = null;
+        }
+    }
+    
+    calculateOverallTilt() {
+        if (this.ingredients.length === 0) return 0;
+        
+        // 计算所有食材的平均角度
+        let totalAngle = 0;
+        let validCount = 0;
+        
+        this.ingredients.forEach(ing => {
+            if (ing.body) {
+                totalAngle += ing.body.angle;
+                validCount++;
+            }
+        });
+        
+        if (validCount === 0) return 0;
+        
+        return totalAngle / validCount;
+    }
+    
+    updateScoreAndHeight() {
+        if (this.ingredients.length === 0) return;
+        
+        // 计算当前高度（从面包底座到最高食材的距离）
+        let minY = Infinity;
+        
+        this.ingredients.forEach(ing => {
+            if (ing.body) {
+                const bounds = ing.body.bounds;
+                if (bounds.min.y < minY) {
+                    minY = bounds.min.y;
+                }
+            }
+        });
+        
+        // 面包底座的顶部Y坐标
+        const baseTopY = this.baseBun.bounds.min.y;
+        
+        // 计算高度（像素转换为分数单位）
+        this.currentHeight = Math.max(0, baseTopY - minY);
+        this.maxHeight = Math.max(this.maxHeight, this.currentHeight);
+        
+        // 计算得分倍率（高度越高倍率越大）
+        // 基础倍率1.0，每增加100像素增加0.5倍
+        this.multiplier = 1.0 + Math.floor(this.currentHeight / 100) * 0.5;
+        
+        // 最近添加的食材给予分数
+        const now = Date.now();
+        this.ingredients.forEach(ing => {
+            if (!ing.scored && ing.added && (now - ing.added) > 1000) {
+                // 食材稳定1秒后计分
+                const basePoints = ing.config.points;
+                const finalPoints = Math.floor(basePoints * this.multiplier);
+                this.score += finalPoints;
+                ing.scored = true;
+                
+                // 检查订单
+                this.checkOrderCompletion(ing.type);
+            }
+        });
+        
+        // 更新UI
+        this.updateUI();
+    }
+    
+    calculateCenterOfMass() {
+        if (this.ingredients.length === 0) {
+            this.centerOfMass = { x: this.baseBun.position.x, y: this.baseBun.position.y };
+            return;
+        }
+        
+        // 计算所有食材的加权重心
+        let totalMass = 0;
+        let weightedX = 0;
+        let weightedY = 0;
+        
+        // 包含面包底座
+        totalMass += this.baseBun.mass || 10;
+        weightedX += this.baseBun.position.x * (this.baseBun.mass || 10);
+        weightedY += this.baseBun.position.y * (this.baseBun.mass || 10);
+        
+        this.ingredients.forEach(ing => {
+            if (ing.body) {
+                totalMass += ing.body.mass;
+                weightedX += ing.body.position.x * ing.body.mass;
+                weightedY += ing.body.position.y * ing.body.mass;
+            }
+        });
+        
+        if (totalMass > 0) {
+            this.centerOfMass = {
+                x: weightedX / totalMass,
+                y: weightedY / totalMass
+            };
+        }
+        
+        // 计算相对于底座中心的偏移百分比
+        const baseCenterX = this.baseBun.position.x;
+        const baseHalfWidth = this.baseBun.bounds.max.x - this.baseBun.bounds.min.x;
+        
+        const offsetX = this.centerOfMass.x - baseCenterX;
+        const offsetPercent = (offsetX / baseHalfWidth) * 100;
+        
+        // 更新UI指示器
+        this.updateCenterOfMassIndicator(offsetPercent);
+    }
+    
+    updateCenterOfMassIndicator(offsetPercent) {
+        const indicatorBar = document.getElementById('indicator-bar');
+        const indicatorValue = document.getElementById('indicator-value');
+        
+        // 限制在-100到100之间
+        const clampedPercent = Math.max(-100, Math.min(100, offsetPercent));
+        
+        // 计算位置（从左到右0%到100%，中心是50%）
+        const positionPercent = 50 + (clampedPercent / 2);
+        
+        // 更新UI
+        indicatorBar.style.left = positionPercent + '%';
+        indicatorValue.textContent = Math.round(Math.abs(clampedPercent)) + '%';
+        
+        // 根据偏移程度改变颜色
+        if (Math.abs(clampedPercent) > 70) {
+            indicatorBar.style.background = '#F44336'; // 红色
+        } else if (Math.abs(clampedPercent) > 40) {
+            indicatorBar.style.background = '#FF9800'; // 橙色
+        } else {
+            indicatorBar.style.background = '#333'; // 正常
+        }
+    }
+    
+    startTimer() {
+        const timerInterval = setInterval(() => {
+            if (this.gameState !== 'playing') {
+                clearInterval(timerInterval);
+                return;
+            }
+            
+            this.timeLeft--;
+            document.getElementById('timer').textContent = this.timeLeft;
+            
+            if (this.timeLeft <= 0) {
+                clearInterval(timerInterval);
+                this.endGame('时间耗尽！');
+            }
+        }, 1000);
+    }
+    
+    startOrderSystem() {
+        // 随机生成第一个订单（延迟5秒）
+        this.orderTimer = setTimeout(() => {
+            this.generateNewOrder();
+        }, 5000);
+    }
+    
+    generateNewOrder() {
+        if (this.gameState !== 'playing') return;
+        
+        // 随机选择订单
+        const template = this.orderTemplates[Math.floor(Math.random() * this.orderTemplates.length)];
+        
+        this.currentOrder = {
+            ...template,
+            startTime: Date.now(),
+            timeLimit: 30000 // 30秒内完成
+        };
+        
+        // 显示订单
+        document.getElementById('order-content').textContent = template.text;
+        document.getElementById('customer-order').classList.remove('hidden');
+        
+        // 订单计时器
+        this.orderTimer = setTimeout(() => {
+            if (this.currentOrder && !this.currentOrder.completed) {
+                // 订单超时，减少分数
+                this.score = Math.max(0, this.score - 50);
+                this.updateUI();
+                
+                // 隐藏订单
+                document.getElementById('customer-order').classList.add('hidden');
+                this.currentOrder = null;
+                
+                // 生成新订单
+                setTimeout(() => this.generateNewOrder(), 5000);
+            }
+        }, 30000);
+    }
+    
+    checkOrderCompletion(ingredientType) {
+        if (!this.currentOrder || this.currentOrder.completed) return;
+        
+        let completed = false;
+        let bonusPoints = 0;
+        
+        switch (this.currentOrder.type) {
+            case 'specific':
+                // 检查是否放置了指定数量的特定食材
+                const count = this.ingredients.filter(ing => 
+                    ing.type === this.currentOrder.ingredient && ing.scored
+                ).length;
+                
+                if (count >= this.currentOrder.count) {
+                    completed = true;
+                    bonusPoints = 100;
+                }
+                break;
+                
+            case 'sequence':
+                // 检查是否按顺序放置了食材
+                // 简化处理：检查是否有这些食材
+                const types = this.ingredients.filter(ing => ing.scored).map(ing => ing.type);
+                const hasAll = this.currentOrder.ingredients.every(type => types.includes(type));
+                
+                if (hasAll) {
+                    completed = true;
+                    bonusPoints = 150;
+                }
+                break;
+                
+            case 'top':
+                // 检查最高的食材是否是指定类型
+                const sortedByHeight = [...this.ingredients]
+                    .filter(ing => ing.scored && ing.body)
+                    .sort((a, b) => a.body.position.y - b.body.position.y);
+                
+                if (sortedByHeight.length > 0 && sortedByHeight[0].type === this.currentOrder.ingredient) {
+                    completed = true;
+                    bonusPoints = 120;
+                }
+                break;
+        }
+        
+        if (completed) {
+            this.currentOrder.completed = true;
+            this.score += bonusPoints;
+            this.updateUI();
+            
+            // 隐藏订单
+            setTimeout(() => {
+                document.getElementById('customer-order').classList.add('hidden');
+                this.currentOrder = null;
+                
+                // 生成新订单
+                setTimeout(() => this.generateNewOrder(), 5000);
+            }, 2000);
+        }
+    }
+    
+    updateUI() {
+        document.getElementById('score').textContent = this.score;
+        document.getElementById('multiplier').textContent = 'x' + this.multiplier.toFixed(1);
+        document.getElementById('height').textContent = Math.round(this.currentHeight);
+    }
+    
+    togglePause() {
+        if (this.gameState === 'playing') {
+            this.gameState = 'paused';
+            document.getElementById('pause-btn').textContent = '继续';
+        } else if (this.gameState === 'paused') {
+            this.gameState = 'playing';
+            document.getElementById('pause-btn').textContent = '暂停';
+            this.gameLoop();
+        }
+    }
+    
+    restartGame() {
+        // 停止当前游戏
+        if (this.runner) {
+            this.Runner.stop(this.runner);
+        }
+        if (this.render) {
+            this.Render.stop(this.render);
+        }
+        
+        // 重置物理世界
+        this.initPhysics();
+        
+        // 开始新游戏
+        this.startGame();
+    }
+    
+    endGame(reason) {
+        if (this.gameState === 'gameover') return;
+        
+        this.gameState = 'gameover';
+        
+        // 停止引擎和渲染
+        if (this.runner) {
+            this.Runner.stop(this.runner);
+        }
+        if (this.render) {
+            this.Render.stop(this.render);
+        }
+        
+        // 清除订单计时器
+        if (this.orderTimer) {
+            clearTimeout(this.orderTimer);
+            this.orderTimer = null;
+        }
+        
+        // 隐藏订单
+        document.getElementById('customer-order').classList.add('hidden');
+        
+        // 显示游戏结束画面
+        document.getElementById('game-over-title').textContent = '游戏结束';
+        document.getElementById('game-over-reason').textContent = reason;
+        document.getElementById('final-score').textContent = this.score;
+        document.getElementById('final-height').textContent = Math.round(this.maxHeight);
+        document.getElementById('game-over').classList.remove('hidden');
+        
+        // 隐藏控制按钮
+        document.getElementById('start-btn').classList.remove('hidden');
+        document.getElementById('pause-btn').classList.add('hidden');
+        document.getElementById('restart-btn').classList.add('hidden');
+    }
+    
+    handleResize() {
+        if (!this.canvasContainer || !this.canvas) return;
+        
+        const rect = this.canvasContainer.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // 更新画布尺寸
+        this.canvas.width = width;
+        this.canvas.height = height;
+        
+        // 注意：这里简化处理，实际游戏中可能需要重新定位所有物理体
+    }
+}
+
+// 页面加载完成后初始化游戏
+document.addEventListener('DOMContentLoaded', () => {
+    new BurgerGame();
+});
