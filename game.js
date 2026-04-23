@@ -240,23 +240,57 @@ class BurgerGame {
     }
     
     bindEvents() {
+        console.log('bindEvents called');
+        
         // 游戏控制按钮
-        document.getElementById('start-btn').addEventListener('click', () => this.startGame());
-        document.getElementById('pause-btn').addEventListener('click', () => this.togglePause());
-        document.getElementById('restart-btn').addEventListener('click', () => this.restartGame());
-        document.getElementById('play-again-btn').addEventListener('click', () => this.restartGame());
+        const startBtn = document.getElementById('start-btn');
+        const pauseBtn = document.getElementById('pause-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const playAgainBtn = document.getElementById('play-again-btn');
+        
+        if (startBtn) {
+            startBtn.addEventListener('click', () => {
+                console.log('Start button clicked');
+                this.startGame();
+            });
+        } else {
+            console.error('Start button not found');
+        }
+        
+        if (pauseBtn) {
+            pauseBtn.addEventListener('click', () => this.togglePause());
+        }
+        
+        if (restartBtn) {
+            restartBtn.addEventListener('click', () => this.restartGame());
+        }
+        
+        if (playAgainBtn) {
+            playAgainBtn.addEventListener('click', () => this.restartGame());
+        }
         
         // 食材选择
         const ingredientItems = document.querySelectorAll('.ingredient-item');
-        ingredientItems.forEach(item => {
-            item.addEventListener('mousedown', (e) => this.startIngredientDrag(e, item));
-            item.addEventListener('touchstart', (e) => this.startIngredientDrag(e, item));
+        console.log('Found ingredient items:', ingredientItems.length);
+        
+        ingredientItems.forEach((item, index) => {
+            console.log(`Binding events for ingredient item ${index}:`, item.dataset.type);
+            
+            item.addEventListener('mousedown', (e) => {
+                console.log('mousedown event on ingredient:', item.dataset.type);
+                this.startIngredientDrag(e, item);
+            });
+            
+            item.addEventListener('touchstart', (e) => {
+                console.log('touchstart event on ingredient:', item.dataset.type);
+                this.startIngredientDrag(e, item);
+            }, { passive: false });
         });
         
         // 鼠标移动和释放
         document.addEventListener('mousemove', (e) => this.onMouseMove(e));
         document.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        document.addEventListener('touchmove', (e) => this.onMouseMove(e));
+        document.addEventListener('touchmove', (e) => this.onMouseMove(e), { passive: false });
         document.addEventListener('touchend', (e) => this.onMouseUp(e));
         
         // 窗口大小改变
@@ -264,14 +298,27 @@ class BurgerGame {
     }
     
     startIngredientDrag(e, item) {
-        if (this.gameState !== 'playing') return;
+        console.log('startIngredientDrag called, gameState:', this.gameState);
         
-        e.preventDefault();
+        if (this.gameState !== 'playing') {
+            console.log('Game not in playing state, cannot drag');
+            return;
+        }
+        
+        // 只在必要时阻止默认行为
+        if (e.type === 'touchstart') {
+            e.preventDefault();
+        }
         
         const ingredientType = item.dataset.type;
         const config = this.ingredientConfig[ingredientType];
         
-        if (!config) return;
+        if (!config) {
+            console.log('No config found for type:', ingredientType);
+            return;
+        }
+        
+        console.log('Starting drag for:', ingredientType);
         
         // 显示拖拽指示器
         const indicator = document.getElementById('dragging-indicator');
@@ -284,8 +331,8 @@ class BurgerGame {
         this.draggedIngredient = {
             type: ingredientType,
             config: config,
-            startX: e.clientX || e.touches[0].clientX,
-            startY: e.clientY || e.touches[0].clientY
+            startX: e.clientX || (e.touches && e.touches[0].clientX),
+            startY: e.clientY || (e.touches && e.touches[0].clientY)
         };
         
         // 更新指示器位置
@@ -299,40 +346,83 @@ class BurgerGame {
     
     updateDragIndicator(e) {
         const indicator = document.getElementById('dragging-indicator');
-        const x = e.clientX || (e.touches && e.touches[0].clientX);
-        const y = e.clientY || (e.touches && e.touches[0].clientY);
         
-        indicator.style.left = x + 'px';
-        indicator.style.top = y + 'px';
+        // 处理不同类型的事件
+        let x, y;
+        if (e.type === 'touchmove' || e.type === 'touchstart') {
+            if (e.touches && e.touches.length > 0) {
+                x = e.touches[0].clientX;
+                y = e.touches[0].clientY;
+            }
+        } else {
+            x = e.clientX;
+            y = e.clientY;
+        }
+        
+        if (x !== undefined && y !== undefined) {
+            indicator.style.left = x + 'px';
+            indicator.style.top = y + 'px';
+        }
     }
     
     onMouseUp(e) {
+        console.log('onMouseUp called, isDragging:', this.isDragging);
+        
         if (!this.isDragging || !this.draggedIngredient) {
             this.isDragging = false;
             return;
         }
         
-        e.preventDefault();
+        // 只在必要时阻止默认行为
+        if (e.type === 'touchend') {
+            e.preventDefault();
+        }
         
         // 隐藏拖拽指示器
         const indicator = document.getElementById('dragging-indicator');
         indicator.classList.add('hidden');
         
         // 获取释放位置
-        const x = e.clientX || (e.changedTouches && e.changedTouches[0].clientX);
-        const y = e.clientY || (e.changedTouches && e.changedTouches[0].clientY);
+        let x, y;
+        if (e.type === 'touchend') {
+            if (e.changedTouches && e.changedTouches.length > 0) {
+                x = e.changedTouches[0].clientX;
+                y = e.changedTouches[0].clientY;
+            } else if (e.touches && e.touches.length > 0) {
+                x = e.touches[0].clientX;
+                y = e.touches[0].clientY;
+            }
+        } else {
+            x = e.clientX;
+            y = e.clientY;
+        }
+        
+        console.log('Release position:', x, y);
+        
+        if (x === undefined || y === undefined) {
+            console.log('Could not get release position');
+            this.isDragging = false;
+            this.draggedIngredient = null;
+            return;
+        }
         
         // 转换为画布坐标
         const canvasRect = this.canvas.getBoundingClientRect();
         const canvasX = x - canvasRect.left;
         const canvasY = y - canvasRect.top;
         
+        console.log('Canvas position:', canvasX, canvasY);
+        console.log('Canvas dimensions:', this.canvas.width, this.canvas.height);
+        
         // 检查是否在画布范围内
         if (canvasX >= 0 && canvasX <= this.canvas.width && 
             canvasY >= 0 && canvasY <= this.canvas.height) {
             
+            console.log('Creating ingredient:', this.draggedIngredient.type);
             // 创建食材物理体
             this.createIngredient(this.draggedIngredient.type, canvasX, canvasY);
+        } else {
+            console.log('Position outside canvas, not creating ingredient');
         }
         
         // 重置拖拽状态
@@ -475,10 +565,11 @@ class BurgerGame {
     }
     
     resetGame() {
+        console.log('resetGame called');
         // 重置分数和时间
         this.score = 0;
         this.multiplier = 1.0;
-        this.timeLeft = 60;
+        this.timeLeft = 120; // 与构造函数保持一致
         this.maxHeight = 0;
         this.currentHeight = 0;
         
