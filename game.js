@@ -812,43 +812,73 @@ class BurgerGame {
     }
     
     startOrderSystem() {
-        // 随机生成第一个订单（延迟5秒）
+        console.log('startOrderSystem called');
+        // 随机生成第一个订单（延迟2秒，让玩家有时间准备）
         this.orderTimer = setTimeout(() => {
+            console.log('Generating first order');
             this.generateNewOrder();
-        }, 5000);
+        }, 2000);
     }
     
     generateNewOrder() {
-        if (this.gameState !== 'playing') return;
+        console.log('generateNewOrder called, gameState:', this.gameState);
+        
+        if (this.gameState !== 'playing') {
+            console.log('Game not in playing state, not generating order');
+            return;
+        }
         
         // 随机选择订单
         const template = this.orderTemplates[Math.floor(Math.random() * this.orderTemplates.length)];
+        console.log('Selected order template:', template.text);
         
         this.currentOrder = {
             ...template,
             startTime: Date.now(),
-            timeLimit: 30000 // 30秒内完成
+            timeLimit: 45000 // 45秒内完成，给玩家更多时间
         };
         
         // 显示订单
-        document.getElementById('order-content').textContent = template.text;
-        document.getElementById('customer-order').classList.remove('hidden');
+        const orderContent = document.getElementById('order-content');
+        const customerOrder = document.getElementById('customer-order');
+        
+        if (orderContent && customerOrder) {
+            orderContent.textContent = template.text;
+            customerOrder.classList.remove('hidden');
+            console.log('Order displayed successfully');
+            
+            // 添加动画效果，让订单更引人注目
+            customerOrder.style.animation = 'none';
+            // 强制重绘
+            void customerOrder.offsetWidth;
+            customerOrder.style.animation = 'floatIn 0.5s ease-out, pulse 2s infinite';
+        } else {
+            console.error('Order elements not found');
+        }
         
         // 订单计时器
+        if (this.orderTimer) {
+            clearTimeout(this.orderTimer);
+        }
+        
         this.orderTimer = setTimeout(() => {
+            console.log('Order timeout check');
             if (this.currentOrder && !this.currentOrder.completed) {
+                console.log('Order timed out');
                 // 订单超时，减少分数
-                this.score = Math.max(0, this.score - 50);
+                this.score = Math.max(0, this.score - 30);
                 this.updateUI();
                 
                 // 隐藏订单
-                document.getElementById('customer-order').classList.add('hidden');
+                if (customerOrder) {
+                    customerOrder.classList.add('hidden');
+                }
                 this.currentOrder = null;
                 
-                // 生成新订单
-                setTimeout(() => this.generateNewOrder(), 5000);
+                // 生成新订单（延迟3秒）
+                setTimeout(() => this.generateNewOrder(), 3000);
             }
-        }, 30000);
+        }, 45000);
     }
     
     checkOrderCompletion(ingredientType) {
