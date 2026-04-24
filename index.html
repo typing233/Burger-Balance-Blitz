@@ -12,10 +12,29 @@
         <!-- 游戏标题 -->
         <div id="game-title">
             <h1>🍔 汉堡堆叠大师</h1>
-            <p>巧妙利用食材特性，堆叠出最高的汉堡巨塔！</p>
+            <p>多台经营 · 配方组合 · 羁绊连锁</p>
         </div>
         
-        <!-- 顾客订单 -->
+        <!-- 台面切换标签 -->
+        <div id="station-tabs">
+            <div class="station-tab active" data-station="0">
+                <span class="station-emoji">🍽️</span>
+                <span class="station-name">一号台</span>
+                <span class="station-score">0</span>
+            </div>
+            <div class="station-tab" data-station="1">
+                <span class="station-emoji">🍽️</span>
+                <span class="station-name">二号台</span>
+                <span class="station-score">0</span>
+            </div>
+            <div class="station-tab locked" data-station="2">
+                <span class="station-emoji">🔒</span>
+                <span class="station-name">三号台</span>
+                <span class="station-score">500分解锁</span>
+            </div>
+        </div>
+        
+        <!-- 顾客订单（多台面） -->
         <div id="customer-order" class="hidden">
             <div class="order-bubble">
                 <span class="customer-emoji">👤</span>
@@ -25,38 +44,61 @@
             </div>
         </div>
         
-        <!-- 游戏信息面板 -->
+        <!-- 游戏信息面板（多台面） -->
         <div id="game-info">
             <div class="info-item">
-                <span class="info-label">得分:</span>
-                <span id="score" class="info-value">0</span>
+                <span class="info-label">总分:</span>
+                <span id="total-score" class="info-value">0</span>
             </div>
             <div class="info-item">
-                <span class="info-label">倍率:</span>
+                <span class="info-label">当前台面倍率:</span>
                 <span id="multiplier" class="info-value">x1.0</span>
             </div>
             <div class="info-item">
                 <span class="info-label">时间:</span>
-                <span id="timer" class="info-value">60</span>
+                <span id="timer" class="info-value">120</span>
             </div>
             <div class="info-item">
-                <span class="info-label">高度:</span>
-                <span id="height" class="info-value">0</span>
+                <span class="info-label">活动羁绊:</span>
+                <span id="active-synergies" class="info-value">0</span>
             </div>
         </div>
         
-        <!-- 重心偏移指示器 -->
-        <div id="center-of-mass-indicator">
-            <div class="indicator-label">重心偏移:</div>
-            <div class="indicator-bar-container">
-                <div id="indicator-bar" class="indicator-bar"></div>
+        <!-- 重心偏移指示器（多台面） -->
+        <div id="center-of-mass-indicators">
+            <div class="station-indicator" data-station="0">
+                <div class="indicator-label">台面1重心:</div>
+                <div class="indicator-bar-container">
+                    <div class="indicator-bar" data-station="0"></div>
+                </div>
+                <div class="indicator-value" data-station="0">0%</div>
             </div>
-            <div id="indicator-value" class="indicator-value">0%</div>
         </div>
         
-        <!-- 游戏画布 -->
+        <!-- 羁绊效果显示 -->
+        <div id="synergy-effects" class="hidden">
+            <div class="synergy-title">🔥 激活羁绊</div>
+            <div id="synergy-list"></div>
+        </div>
+        
+        <!-- 配方展示面板 -->
+        <div id="recipes-panel">
+            <div class="recipes-header">
+                <span class="recipes-title">📜 招牌汉堡配方</span>
+                <button id="toggle-recipes" class="small-btn">展开</button>
+            </div>
+            <div id="recipes-list" class="hidden">
+                <!-- 配方将动态生成 -->
+            </div>
+        </div>
+        
+        <!-- 游戏画布容器（多台面支持） -->
         <div id="canvas-container">
             <canvas id="game-canvas"></canvas>
+            <!-- 跨台面拖放指示器 -->
+            <div id="station-drop-indicator" class="hidden">
+                <span id="drop-station-name"></span>
+            </div>
         </div>
         
         <!-- 食材选择面板 -->
@@ -91,6 +133,13 @@
                 <div class="ingredient-name">培根</div>
                 <div class="ingredient-desc">细长弯曲</div>
             </div>
+            <!-- 新特殊食材：辣椒酱 -->
+            <div class="ingredient-item special-ingredient" data-type="hotsauce" data-unlock-score="100">
+                <div class="ingredient-icon">🌶️</div>
+                <div class="ingredient-name">辣椒酱</div>
+                <div class="ingredient-desc">火爆联动</div>
+                <div class="unlock-hint">100分解锁</div>
+            </div>
             <div class="ingredient-item special-ingredient" data-type="pickle" data-unlock-score="200">
                 <div class="ingredient-icon">🥒</div>
                 <div class="ingredient-name">酸黄瓜</div>
@@ -102,6 +151,12 @@
                 <div class="ingredient-name">煎蛋</div>
                 <div class="ingredient-desc">易滑落</div>
                 <div class="unlock-hint">300分解锁</div>
+            </div>
+            <div class="ingredient-item special-ingredient" data-type="mushroom" data-unlock-score="400">
+                <div class="ingredient-icon">🍄</div>
+                <div class="ingredient-name">蘑菇</div>
+                <div class="ingredient-desc">弹性搭配</div>
+                <div class="unlock-hint">400分解锁</div>
             </div>
             <div class="ingredient-item special-ingredient" data-type="jelly" data-unlock-score="500">
                 <div class="ingredient-icon">🍮</div>
@@ -129,9 +184,39 @@
             <div class="game-over-content">
                 <h2 id="game-over-title">游戏结束</h2>
                 <p id="game-over-reason"></p>
-                <p class="final-score">最终得分: <span id="final-score">0</span></p>
+                <div class="station-scores">
+                    <div class="station-score-item">
+                        <span>一号台得分:</span>
+                        <span id="station-0-score">0</span>
+                    </div>
+                    <div class="station-score-item">
+                        <span>二号台得分:</span>
+                        <span id="station-1-score">0</span>
+                    </div>
+                </div>
+                <p class="final-score">最终总分: <span id="final-score">0</span></p>
                 <p class="final-height">最高高度: <span id="final-height">0</span></p>
+                <p class="final-synergies">激活羁绊: <span id="final-synergies">0</span></p>
+                <p class="final-recipes">完成配方: <span id="final-recipes">0</span></p>
                 <button id="play-again-btn">再玩一次</button>
+            </div>
+        </div>
+        
+        <!-- 配方解锁提示 -->
+        <div id="recipe-unlock-popup" class="hidden">
+            <div class="popup-content">
+                <h3>🎉 配方解锁！</h3>
+                <p id="unlock-recipe-name"></p>
+                <p id="unlock-recipe-effect"></p>
+            </div>
+        </div>
+        
+        <!-- 羁绊激活提示 -->
+        <div id="synergy-popup" class="hidden">
+            <div class="popup-content synergy-popup">
+                <h3 id="synergy-popup-title">🔥 羁绊激活！</h3>
+                <p id="synergy-popup-name"></p>
+                <p id="synergy-popup-effect"></p>
             </div>
         </div>
         
