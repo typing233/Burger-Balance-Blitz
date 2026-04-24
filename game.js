@@ -1200,8 +1200,21 @@ class BurgerGame {
     }
     
     calculateCenterOfMass() {
+        // 确保 baseBun 存在且有基本属性
+        if (!this.baseBun || !this.baseBun.position) {
+            this.updateCenterOfMassIndicator(0);
+            return;
+        }
+        
+        // 初始化重心为面包底座的位置
+        this.centerOfMass = { 
+            x: this.baseBun.position.x, 
+            y: this.baseBun.position.y 
+        };
+        
+        // 如果没有食材，直接返回0%偏移
         if (this.ingredients.length === 0) {
-            this.centerOfMass = { x: this.baseBun.position.x, y: this.baseBun.position.y };
+            this.updateCenterOfMassIndicator(0);
             return;
         }
         
@@ -1210,20 +1223,24 @@ class BurgerGame {
         let weightedX = 0;
         let weightedY = 0;
         
-        // 包含面包底座
-        totalMass += this.baseBun.mass || 10;
-        weightedX += this.baseBun.position.x * (this.baseBun.mass || 10);
-        weightedY += this.baseBun.position.y * (this.baseBun.mass || 10);
+        // 包含面包底座（使用固定质量值）
+        const baseMass = 10;
+        totalMass += baseMass;
+        weightedX += this.baseBun.position.x * baseMass;
+        weightedY += this.baseBun.position.y * baseMass;
         
+        // 添加所有食材的质量
         this.ingredients.forEach(ing => {
-            if (ing.body) {
-                totalMass += ing.body.mass;
-                weightedX += ing.body.position.x * ing.body.mass;
-                weightedY += ing.body.position.y * ing.body.mass;
+            if (ing.body && ing.body.position) {
+                const mass = ing.body.mass || 1;
+                totalMass += mass;
+                weightedX += ing.body.position.x * mass;
+                weightedY += ing.body.position.y * mass;
             }
         });
         
-        if (totalMass > 0) {
+        // 计算重心
+        if (totalMass > 0 && isFinite(totalMass)) {
             this.centerOfMass = {
                 x: weightedX / totalMass,
                 y: weightedY / totalMass
@@ -1232,10 +1249,34 @@ class BurgerGame {
         
         // 计算相对于底座中心的偏移百分比
         const baseCenterX = this.baseBun.position.x;
-        const baseHalfWidth = this.baseBun.bounds.max.x - this.baseBun.bounds.min.x;
         
-        const offsetX = this.centerOfMass.x - baseCenterX;
-        const offsetPercent = (offsetX / baseHalfWidth) * 100;
+        // 获取面包底座的半宽度（使用固定值或从bounds计算）
+        let baseHalfWidth = 75; // 默认值：150像素宽度的一半
+        
+        // 尝试从 bounds 获取宽度
+        if (this.baseBun.bounds && 
+            this.baseBun.bounds.max && 
+            this.baseBun.bounds.min &&
+            isFinite(this.baseBun.bounds.max.x) && 
+            isFinite(this.baseBun.bounds.min.x)) {
+            const baseFullWidth = this.baseBun.bounds.max.x - this.baseBun.bounds.min.x;
+            if (baseFullWidth > 0) {
+                baseHalfWidth = baseFullWidth / 2; // 计算半宽
+            }
+        }
+        
+        // 计算偏移百分比
+        let offsetPercent = 0;
+        
+        if (this.centerOfMass && isFinite(this.centerOfMass.x) && isFinite(baseCenterX) && baseHalfWidth > 0) {
+            const offsetX = this.centerOfMass.x - baseCenterX;
+            offsetPercent = (offsetX / baseHalfWidth) * 100;
+            
+            // 确保值是有限的
+            if (!isFinite(offsetPercent)) {
+                offsetPercent = 0;
+            }
+        }
         
         // 更新UI指示器
         this.updateCenterOfMassIndicator(offsetPercent);
@@ -1245,23 +1286,36 @@ class BurgerGame {
         const indicatorBar = document.getElementById('indicator-bar');
         const indicatorValue = document.getElementById('indicator-value');
         
+        // 确保输入值是有效的数字
+        let safePercent = 0;
+        if (typeof offsetPercent === 'number' && isFinite(offsetPercent)) {
+            safePercent = offsetPercent;
+        }
+        
         // 限制在-100到100之间
-        const clampedPercent = Math.max(-100, Math.min(100, offsetPercent));
+        const clampedPercent = Math.max(-100, Math.min(100, safePercent));
         
         // 计算位置（从左到右0%到100%，中心是50%）
         const positionPercent = 50 + (clampedPercent / 2);
         
         // 更新UI
-        indicatorBar.style.left = positionPercent + '%';
-        indicatorValue.textContent = Math.round(Math.abs(clampedPercent)) + '%';
+        if (indicatorBar) {
+            indicatorBar.style.left = positionPercent + '%';
+        }
+        
+        if (indicatorValue) {
+            indicatorValue.textContent = Math.round(Math.abs(clampedPercent)) + '%';
+        }
         
         // 根据偏移程度改变颜色
-        if (Math.abs(clampedPercent) > 70) {
-            indicatorBar.style.background = '#F44336'; // 红色
-        } else if (Math.abs(clampedPercent) > 40) {
-            indicatorBar.style.background = '#FF9800'; // 橙色
-        } else {
-            indicatorBar.style.background = '#333'; // 正常
+        if (indicatorBar) {
+            if (Math.abs(clampedPercent) > 70) {
+                indicatorBar.style.background = '#F44336'; // 红色
+            } else if (Math.abs(clampedPercent) > 40) {
+                indicatorBar.style.background = '#FF9800'; // 橙色
+            } else {
+                indicatorBar.style.background = '#333'; // 正常
+            }
         }
     }
     
