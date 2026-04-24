@@ -120,14 +120,8 @@ class BaseStation {
             shakeIntensity: 0
         };
         
-        if (this.ingredients.length > 0) {
-            this.ingredients.forEach(ing => {
-                if (ing.body) {
-                    this.game.World.remove(this.game.world, ing.body);
-                }
-            });
-            this.ingredients = [];
-        }
+        this.ingredients = [];
+        this.baseBun = null;
     }
 }
 
@@ -1064,6 +1058,7 @@ class BurgerGame {
         this.startEnvironmentSystem();
         
         this.updateUI();
+        this.updateCenterOfMassIndicators();
         
         document.getElementById('start-btn').classList.add('hidden');
         document.getElementById('pause-btn').classList.remove('hidden');
